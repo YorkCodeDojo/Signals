@@ -1,4 +1,4 @@
-﻿var data = new Signal<List<People>>();
+﻿var data = new Signal<List<People>>(); 
 
 var adults = SignalBuilder.DependsOn(data)
                           .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList());
@@ -19,122 +19,179 @@ Console.WriteLine(adults.Get().Count);
 Console.WriteLine(numberOfAdults.Get());
 
 
-public interface ISignal<T>
+public interface ISignal
 {
-    public T Get();
-    void HasEffect(Action<T, T> action);
+    public void MarkAsSuspect();
+    
+    public int Version { get; } 
+}
+public interface IComputeSignal : ISignal
+{
+    void EnsureNodeIsComputed();
 }
 
-
-public abstract class BaseSignal
+public abstract class BaseSignal<T> : ISignal
 {
-    protected List<BaseSignal> _children = [];
+    // Who depends on this signal
+    private List<IComputeSignal> _children = [];
 
-    protected bool _isDirty = false;
+    // Value the last time this signal was calculated
+    protected T Value = default!;
     
-    public void AddChild(BaseSignal signal)
+    // How many times has the value of this signal changed
+    public int Version { get; set; } 
+    
+    // We are suspect when a node somewhere above us in the graph has changed
+    protected bool IsSuspect = true;
+  
+    // Optional method to call when the value of this signal changes
+    protected Action<T,T>? Effect;
+
+    public abstract T Get();
+
+    public void HasEffect(Action<T, T> effect)
+    {
+        Effect = effect;
+    }
+    
+    public void AddChild(IComputeSignal signal)
     {
         _children.Add(signal);
     }
 
-    protected virtual void MarkAsDirty()
+    public void MarkAsSuspect()
     {
-        if (!_isDirty)
+        if (!IsSuspect)
         {
-            _isDirty = true;
+            IsSuspect = true;
             foreach (var child in _children)
-                child.MarkAsDirty();
+                child.MarkAsSuspect();
         }
     }
-    
 }
 
 
-public class Signal<T> : BaseSignal, ISignal<T>
+public class Signal<T> : BaseSignal<T>
 {
-    private T _value = default!;
-    private Action<T,T> _action;
-
     public void Set(T value)
     {
-        if (_value is null || !_value.Equals(value))
+        if (Value is null || !Value.Equals(value))
         {
-            MarkAsDirty();
-            _value = value;
-            _isDirty = false;
+            // Top level signal has changed, so we need to mark all children as suspect
+            MarkAsSuspect();
+
+            // Update our value and bump the version
+            var oldValue = Value;
+            Value = value;
+            IsSuspect = false;
+            Version++;
+            
+            Effect?.Invoke(oldValue, value);
         }
     }
-    
-    public T Get()
+   
+    public override T Get()
     {
-        return _value;
-    }
-
-    public void HasEffect(Action<T, T> action)
-    {
-        _action = action;
+        // Top level signal, so we know it's always correct
+        return Value;
     }
 }
 
-public class ReadOnlySignal1<T, T1> : BaseSignal, ISignal<T>
+public abstract class ReadOnlySignal<T> : BaseSignal<T>, IComputeSignal
 {
-    private T _value;
-    private readonly ISignal<T1> _counter1;
-    private readonly Func<ISignal<T1>, T> _func;
-    private Action<T, T>? _action;
 
-    public ReadOnlySignal1(ISignal<T1> counter1, Func<ISignal<T1>, T> func)
+    protected class SignalWithVersion(ISignal signal, int version)
     {
-        _counter1 = counter1;
-        _func = func;
+        public int Version { get; set; } = version;
+        public ISignal Signal { get; set; } = signal;
+    }
 
-        ((BaseSignal)_counter1).AddChild(this);
-
-        _isDirty = true;
+    // Who do we depend on?
+    protected List<SignalWithVersion> Parents = [];
+    
+    protected void AddParent(ISignal signal)
+    {
+        Parents.Add(new SignalWithVersion(signal, signal.Version));
     }
     
-    public T Get()
+    protected abstract void Compute();
+    
+    public override T Get()
     {
-        if (_isDirty)
-        {
-            _value = _func(_counter1);
-            _isDirty = false;
-        }
-
-        return _value;
+        EnsureNodeIsComputed();
+        return Value;
     }
     
-    protected override void MarkAsDirty()
+    public void EnsureNodeIsComputed()
     {
-        base.MarkAsDirty();
-        if (_action != null)
+        if (!IsSuspect) return;  // All good
+        
+        // Make sure our parents are good
+        foreach (var parent in Parents)
         {
-            var currentValue = _value;
-            var newValue = Get();
-            if (currentValue is null || !currentValue.Equals(newValue))
+            if (parent.Signal is IComputeSignal computeSignal)
             {
-                _action(currentValue,newValue);
+                computeSignal.EnsureNodeIsComputed();
             }
         }
+
+        // If any of our parents have changed,  then we need to update
+        var updateNeeded = false;
+        foreach (var parent in Parents)
+        {
+            if (parent.Version != parent.Signal.Version)
+            {
+                updateNeeded = true;
+                parent.Version = parent.Signal.Version;
+            }
+        }
+
+        if (updateNeeded)
+        {
+            var oldValue = Value;
+            
+            Compute();
+
+            if (oldValue == null || !oldValue.Equals(Value))
+                Version++;
+        }
+        
+        IsSuspect = false;
     }
     
-    public void HasEffect(Action<T, T> action)
+}
+
+public class ReadOnlySignal1<T, T1> : ReadOnlySignal<T>
+{
+    private readonly Func<BaseSignal<T1>, T> _func;
+
+    public ReadOnlySignal1(BaseSignal<T1> counter1, Func<BaseSignal<T1>, T> func)
     {
-        _action = action;
+        _func = func;
+
+        counter1.AddChild(this);
+        AddParent(counter1);
+
+        IsSuspect = true;
+    }
+    
+    protected override void Compute()
+    {
+        Value = _func((BaseSignal<T1>)Parents[0].Signal);
     }
 }
 
 public static class SignalBuilder
 {
-    public static ReadOnlySignalBuilder1<T1> DependsOn<T1>(ISignal<T1> counter1)
+    public static ReadOnlySignalBuilder1<T1> DependsOn<T1>(BaseSignal<T1> counter1)
     {
         return new ReadOnlySignalBuilder1<T1>(counter1);
     }
 }
 
-public class ReadOnlySignalBuilder1<T1>(ISignal<T1> counter1)
+public class ReadOnlySignalBuilder1<T1>(BaseSignal<T1> counter1)
 {
-    public ISignal<TResult> ComputedBy<TResult>(Func<ISignal<T1>, TResult> func)
+    public BaseSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, TResult> func)
     {
         return new ReadOnlySignal1<TResult, T1>(counter1, func);
     }
