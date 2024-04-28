@@ -1,23 +1,50 @@
-﻿var data = new Signal<List<People>>(); 
+﻿// var data = new Signal<List<People>>(); 
+//
+// var adults = SignalBuilder.DependsOn(data)
+//                           .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList());
+//
+// var numberOfAdults = SignalBuilder.DependsOn(adults)
+//                                   .ComputedBy(value =>
+//                                   {
+//                                       Console.WriteLine("Counting adults");
+//                                       return value.Get().Count;
+//                                   });
+//
+// numberOfAdults.HasEffect((oldCount, newCount) => 
+//     Console.WriteLine($"Number of adults changed from {oldCount} to {newCount}"));
+//
+// data.Set([new People("David", 48)]);
+// Console.WriteLine(adults.Get().Count);
+//
+// data.Set([new People("David", 48), new People("Rebecca",48)]);
+// data.Set([new People("David", 48), new People("Rebecca",48)]);
+//
+// Console.WriteLine(adults.Get().Count);
+// Console.WriteLine(numberOfAdults.Get());
+//
+// data.Set([new People("David", 48), new People("Rebecca",48), new People("Mary",8)]);
 
-var adults = SignalBuilder.DependsOn(data)
-                          .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList());
 
-var numberOfAdults = SignalBuilder.DependsOn(adults)
-                                  .ComputedBy(value => value.Get().Count);
 
-numberOfAdults.HasEffect((oldCount, newCount) => 
-    Console.WriteLine($"Number of adults changed from {oldCount} to {newCount}"));
+var counter = new Signal<int>(0);
+counter.HasEffect((from,to) => Console.WriteLine($"Counter changed from {from} to {to}."));
+var isEven = SignalBuilder.DependsOn(counter).ComputedBy(c => c.Get() % 2 == 0);
 
-data.Set([new People("David", 48)]);
-Console.WriteLine(adults.Get().Count);
+Console.WriteLine(counter.Get());
+Console.WriteLine(isEven.Get());
 
-data.Set([new People("David", 48), new People("Rebecca",48)]);
-data.Set([new People("David", 48), new People("Rebecca",48)]);
+var parity = SignalBuilder.DependsOn(isEven).ComputedBy(i =>
+{
+    Console.WriteLine("Computing parity");
+    return i.Get() ? "Even" : "Odd";
+});
+parity.HasEffect((from,to) => Console.WriteLine($"Parity changed from {from} to {to}."));
 
-Console.WriteLine(adults.Get().Count);
-Console.WriteLine(numberOfAdults.Get());
-
+counter.Set(counter.Get() + 1);
+counter.Set(counter.Get() + 1);
+counter.Set(counter.Get() + 2);
+counter.Set(counter.Get() + 4);
+counter.Set(counter.Get() + 1);
 
 public interface ISignal
 {
@@ -28,12 +55,13 @@ public interface ISignal
 public interface IComputeSignal : ISignal
 {
     void EnsureNodeIsComputed();
+    void FireEffects();
 }
 
 public abstract class BaseSignal<T> : ISignal
 {
     // Who depends on this signal
-    private List<IComputeSignal> _children = [];
+    protected readonly List<IComputeSignal> Children = [];
 
     // Value the last time this signal was calculated
     protected T Value = default!;
@@ -56,7 +84,7 @@ public abstract class BaseSignal<T> : ISignal
     
     public void AddChild(IComputeSignal signal)
     {
-        _children.Add(signal);
+        Children.Add(signal);
     }
 
     public void MarkAsSuspect()
@@ -64,7 +92,7 @@ public abstract class BaseSignal<T> : ISignal
         if (!IsSuspect)
         {
             IsSuspect = true;
-            foreach (var child in _children)
+            foreach (var child in Children)
                 child.MarkAsSuspect();
         }
     }
@@ -73,6 +101,11 @@ public abstract class BaseSignal<T> : ISignal
 
 public class Signal<T> : BaseSignal<T>
 {
+    public Signal(T initialValue)
+    {
+        Value = initialValue;
+        IsSuspect = false;
+    }
     public void Set(T value)
     {
         if (Value is null || !Value.Equals(value))
@@ -87,6 +120,9 @@ public class Signal<T> : BaseSignal<T>
             Version++;
             
             Effect?.Invoke(oldValue, value);
+            
+            foreach (var child in Children)
+                child.FireEffects();
         }
     }
    
@@ -97,13 +133,13 @@ public class Signal<T> : BaseSignal<T>
     }
 }
 
-public abstract class ReadOnlySignal<T> : BaseSignal<T>, IComputeSignal
+public abstract class ComputedSignal<T> : BaseSignal<T>, IComputeSignal
 {
 
     protected class SignalWithVersion(ISignal signal, int version)
     {
         public int Version { get; set; } = version;
-        public ISignal Signal { get; set; } = signal;
+        public ISignal Signal { get; } = signal;
     }
 
     // Who do we depend on?
@@ -111,7 +147,7 @@ public abstract class ReadOnlySignal<T> : BaseSignal<T>, IComputeSignal
     
     protected void AddParent(ISignal signal)
     {
-        Parents.Add(new SignalWithVersion(signal, signal.Version));
+        Parents.Add(new SignalWithVersion(signal, -1));
     }
     
     protected abstract void Compute();
@@ -120,6 +156,29 @@ public abstract class ReadOnlySignal<T> : BaseSignal<T>, IComputeSignal
     {
         EnsureNodeIsComputed();
         return Value;
+    }
+    
+    public void FireEffects()
+    {
+        if (Effect != null)
+        {
+            var oldValue = Value;
+            EnsureNodeIsComputed();
+            if (oldValue is null || !oldValue.Equals(Value))
+            {
+                Effect(oldValue, Value);
+            }
+            else
+            {
+                // We didn't change,  so don't need to examine our children
+                return;
+            }
+        }
+        // We have changed,  so maybe our children have as well
+        foreach (var child in Children)
+        {
+            child.FireEffects();
+        }
     }
     
     public void EnsureNodeIsComputed()
@@ -161,18 +220,18 @@ public abstract class ReadOnlySignal<T> : BaseSignal<T>, IComputeSignal
     
 }
 
-public class ReadOnlySignal1<T, T1> : ReadOnlySignal<T>
+public class ComputedSignal1<T, T1> : ComputedSignal<T>
 {
     private readonly Func<BaseSignal<T1>, T> _func;
 
-    public ReadOnlySignal1(BaseSignal<T1> counter1, Func<BaseSignal<T1>, T> func)
+    public ComputedSignal1(BaseSignal<T1> counter1, Func<BaseSignal<T1>, T> func)
     {
         _func = func;
 
         counter1.AddChild(this);
         AddParent(counter1);
 
-        IsSuspect = true;
+        EnsureNodeIsComputed();
     }
     
     protected override void Compute()
@@ -193,7 +252,7 @@ public class ReadOnlySignalBuilder1<T1>(BaseSignal<T1> counter1)
 {
     public BaseSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, TResult> func)
     {
-        return new ReadOnlySignal1<TResult, T1>(counter1, func);
+        return new ComputedSignal1<TResult, T1>(counter1, func);
     }
 }
 
