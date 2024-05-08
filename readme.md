@@ -82,10 +82,9 @@ counter.Set(12);
 
 ## Lazy 
 
-In the previous example not only aren't the other two effect triggered, but also parity isn't even computed.
+In the previous example not only aren't the other two effects triggered, but parity isn't even computed.
 
 ``` csharp
-// Not only aren't the other two effect triggered, but also parity isn't even computed.
 parity = SignalBuilder.DependsOn(isEven).ComputedBy(v =>
 {
     Console.WriteLine("Compute parity");
@@ -106,13 +105,13 @@ Console.WriteLine(parity.Get());
 Attempt to implement the Signals API in a language of your choosing.
 1. The solution should only trigger effects if the data has really changed.
 2. Signals should only be evaluated if needed.
-3. Try to provide a new API for your users.
+3. Try to provide a nice API for your users.
 
 
 ## Extension
 
-So far we have only looked at a signal for a primitive type (integer).  In the real world we need to
-cater for arrays/lists of classes.  For example
+So far we have only looked at a signals based on a primitive type (integer).  In the real world we need to
+cater for arrays/lists of classes.  For example:
 
 ``` csharp
 
@@ -134,5 +133,7 @@ numberOfAdults.AddEffect((oldCount, newCount) =>
     Console.WriteLine($"Number of adults changed from {oldCount} to {newCount}"));
 
 ```
+
+The **numberOfAdults** signal only needs to be computed if **adults** changes.
 
 Hint: In order to get this to work,  you many have to supply your own Equality function.
