@@ -4,7 +4,7 @@
 There are two types of signals.  Top level signals can be assigned values.  Here we create one
 called **counter** which we initially a assign a value of 4
 
-`var counter = new Signal<int>(4);`
+`counter = new Signal(4);`
 
 this can be changed to a five etc using `Set`.
 
@@ -12,20 +12,20 @@ this can be changed to a five etc using `Set`.
 
 and read back using `Get`
 
-`Console.WriteLine(counter.Get());   // prints 5`
+`counter.Get();   // prints 5`
 
 
 ## Computed Signals
 
 The second type of signals are computed ones,  these are based on other signals
 
-`var isEven = SignalBuilder.DependsOn(counter).ComputedBy(v => v.Get() % 2 == 0);`
+`isEven = SignalBuilder.DependsOn(counter).ComputedBy(counterSignal => counterSignal.Get() % 2 == 0);`
 
-`Console.WriteLine(isEven.Get());   // prints false as counter is 5`
+`isEven.Get();   // prints false as counter is 5`
 
 `counter.Set(6);`
 
-`Console.WriteLine(isEven.Get());   // prints true as counter is 6`
+`isEven.Get();   // prints true as counter is 6`
 
 ---
 
@@ -39,22 +39,22 @@ The proposed Javascript version looks a bit nicer,  but it's harder to work out 
 
 Computed signals can also be based on other computed signals
 
-`var parity = SignalBuilder.DependsOn(isEven).ComputedBy(v => v.Get() ? "Even" : "Odd");`
+`parity = SignalBuilder.DependsOn(isEven).ComputedBy(isEvenSignal => isEvenSignal.Get() ? "Even" : "Odd");`
 
-`Console.WriteLine(parity.Get());   // prints Even as isEven is true`
+`parity.Get();   // prints Even as isEven is true`
 
 `counter.Set(9);`
 
-`Console.WriteLine(parity.Get());   // prints odd as isEven is now false`
+`parity.Get();   // prints odd as isEven is now false`
 
 ---
 or on multiple signals
 
-`var firstName = new Signal<string>("David");`
+`firstName = new Signal("David");`
 
-`var surname = new Signal<string>("Betteridge");`
+`surname = new Signal("Betteridge");`
 
-`var fullname = SignalBuilder.DependsOn(firstName, surname).ComputedBy((f,l) => $"{f.Get()} {l.Get()}");`
+`fullname = SignalBuilder.DependsOn(firstName, surname).ComputedBy((f,l) => $"{f.Get()} {l.Get()}");`
 
 ---
 
@@ -93,11 +93,11 @@ parity = SignalBuilder.DependsOn(isEven).ComputedBy(v =>
 
 // This changes the value for isEven so parity is computed
 counter.Set(13);
-Console.WriteLine(parity.Get());
+parity.Get();
 
 // This doesn't change the value for isEven so parity isn't computed
 counter.Set(15);
-Console.WriteLine(parity.Get());
+parity.Get();
 ```
 
 ## Challenge
