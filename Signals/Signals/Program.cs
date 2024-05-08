@@ -75,12 +75,25 @@ Console.WriteLine("Done");
 
 
 
+bool CompareOrderedLists<T>(IList<T> lhs, IList<T> rhs) where T : notnull
+{
+    if (lhs.Count != rhs.Count)
+        return false;
 
+    for (var i = 0; i < lhs.Count; i++)
+    {
+        if (!lhs[i].Equals(rhs[i]))
+            return false;
+    }
 
-var data = new Signal<List<People>>([new People("David", 48)]); 
+    return true;
+}
+
+var data = new Signal<List<People>>([new People("David", 48)]).UsingEquality(CompareOrderedLists); 
 
 var adults = SignalBuilder.DependsOn(data)
-                          .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList());
+                          .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList())
+                          .UsingEquality(CompareOrderedLists);
 
 var numberOfAdults = SignalBuilder.DependsOn(adults)
                                   .ComputedBy(value =>
@@ -100,7 +113,7 @@ data.Set([new People("David", 48), new People("Rebecca",48)]);
 Console.WriteLine(adults.Get().Count);
 Console.WriteLine(numberOfAdults.Get());
 
-data.Set([new People("David", 48), new People("Rebecca",48), new People("Mary",8)]);
+data.Set([new People("David", 48), new People("Rebecca",48)]);
 
 
 record People(string Name, int Age);
@@ -273,6 +286,7 @@ public abstract class BaseSignal<T> : ISignal
   
     // Optional method to call when the value of this signal changes
     protected Action<T,T>? Effect;
+    protected Func<T, T, bool>? _comparer;
 
     public abstract T Get();
 
@@ -307,7 +321,9 @@ public class Signal<T> : BaseSignal<T>
     }
     public void Set(T value)
     {
-        if (Value is null || !Value.Equals(value))
+        var changed = _comparer is null ? (Value is null || !Value.Equals(value)) : !_comparer(Value, value);
+        
+        if (changed)
         {
             // Top level signal has changed, so we need to mark all children as suspect
             MarkAsSuspect();
@@ -329,6 +345,12 @@ public class Signal<T> : BaseSignal<T>
     {
         // Top level signal, so we know it's always correct
         return Value;
+    }
+    
+    public Signal<T> UsingEquality(Func<T, T, bool> comparer)
+    {
+        _comparer = comparer;
+        return this;
     }
 }
 
@@ -363,7 +385,9 @@ public abstract class ComputedSignal<T> : BaseSignal<T>, IComputeSignal
         {
             var oldValue = Value;
             EnsureNodeIsComputed();
-            if (oldValue is null || !oldValue.Equals(Value))
+            
+            var changed = _comparer is null ? (Value is null || !Value.Equals(oldValue)) : !_comparer(Value, oldValue);
+            if (changed)
             {
                 Effect(oldValue, Value);
             }
@@ -409,14 +433,19 @@ public abstract class ComputedSignal<T> : BaseSignal<T>, IComputeSignal
             var oldValue = Value;
             
             Compute();
-
-            if (oldValue == null || !oldValue.Equals(Value))
+            var changed = _comparer is null ? (Value is null || !Value.Equals(oldValue)) : !_comparer(Value, oldValue);
+            if (changed)
                 Version++;
         }
         
         IsSuspect = false;
     }
     
+    public BaseSignal<T> UsingEquality(Func<T, T, bool> comparer)
+    {
+        _comparer = comparer;
+        return this;
+    }
 }
 
 public class ComputedSignal1<T, T1> : ComputedSignal<T>
@@ -478,7 +507,7 @@ public static class SignalBuilder
 
 public class ReadOnlySignalBuilder1<T1>(BaseSignal<T1> counter1)
 {
-    public BaseSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, TResult> func)
+    public ComputedSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, TResult> func)
     {
         return new ComputedSignal1<TResult, T1>(counter1, func);
     }
@@ -486,7 +515,7 @@ public class ReadOnlySignalBuilder1<T1>(BaseSignal<T1> counter1)
 
 public class ReadOnlySignalBuilder2<T1,T2>(BaseSignal<T1> counter1, BaseSignal<T2> counter2)
 {
-    public BaseSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, BaseSignal<T2>, TResult> func)
+    public ComputedSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, BaseSignal<T2>, TResult> func)
     {
         return new ComputedSignal2<TResult, T1, T2>(counter1, counter2, func);
     }
