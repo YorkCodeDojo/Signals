@@ -1,5 +1,6 @@
 from unittest import TestCase
 
+from computed_signal import ComputedSignal
 from signal import Signal
 
 
@@ -15,3 +16,37 @@ class TestSignal(TestCase):
         s.set(5)
 
         self.assertIs(s.get(), 5)
+
+    def test_that_computed_signal_returns_constructor(self):
+        s = ComputedSignal(Signal(4), lambda x: x)
+
+        self.assertIs(s.get(), 4)
+
+    def test_that_computed_signal_returns_dependent_value(self):
+        # make a signal
+        s = Signal(4)
+
+        # make a computed signal that depends on the signal
+        is_even = ComputedSignal(s, lambda signal: signal.get() % 2 == 0)
+
+        self.assertIs(is_even.get(), True)
+
+    def test_that_computed_signal_after_set_returns_dependent_value(self):
+        # make a signal
+        s = Signal(4)
+        s.set(123124218421)
+
+        # make a computed signal that depends on the signal
+        is_even = ComputedSignal(s, lambda signal: signal.get() % 2 == 0)
+
+        self.assertIs(is_even.get(), False)
+
+    def test_that_computed_signal_returns_dependent_value_post_creation(self):
+        # make a signal
+        s = Signal(4)
+
+        # make a computed signal that depends on the signal
+        is_even = ComputedSignal(s, lambda signal: signal.get() % 2 == 0)
+        s.set(123124218421)
+
+        self.assertIs(is_even.get(), False)
