@@ -12,7 +12,7 @@ Console.WriteLine(counter.Get());   // prints 5
 
 
 // The other type of signals are computed ones,  which are based on other signals
-var isEven = SignalBuilder.DependsOn(counter).ComputedBy(v => v.Get() % 2 == 0);
+var isEven = SignalBuilder.DependsOn(counter).ComputedBy(counterSignal => counterSignal.Get() % 2 == 0);
 
 // The javascript version looks a bit nicer,  but it's harder to work out what this counter depends on.
 //var isEven = SignalBuilder.ComputedBy(() => counter.Get() % 2 == 0);
@@ -25,7 +25,7 @@ Console.WriteLine(isEven.Get());   // prints true as counter is 6
 
 
 // Computed signals can also be based on other computed signals
-var parity = SignalBuilder.DependsOn(isEven).ComputedBy(v => v.Get() ? "Even" : "Odd");
+var parity = SignalBuilder.DependsOn(isEven).ComputedBy(isEvenSignal => isEvenSignal.Get() ? "Even" : "Odd");
 Console.WriteLine(parity.Get());   // prints Even as isEven is true
 
 counter.Set(9);
@@ -35,8 +35,9 @@ Console.WriteLine(parity.Get());   // prints odd as isEven is now false
 // or on multiple signals
 var firstName = new Signal<string>("David");
 var surname = new Signal<string>("Betteridge");
-//var fullname = SignalBuilder.DependsOn(firstName, surname).ComputedBy((f,l) => $"{f.Get()} {l.Get()}");
+var fullname = SignalBuilder.DependsOn(firstName, surname).ComputedBy((f,l) => $"{f.Get()} {l.Get()}");
 
+Console.WriteLine(fullname.Get());
 
 // Effects can be added to signals which are automatically triggered when a value changes
 counter.AddEffect((previous, current) => Console.WriteLine($"Counter changed {previous} to {current}"));
@@ -53,10 +54,10 @@ counter.Set(12);
 
 
 // Not only aren't the other two effect triggered, but also parity isn't even computed.
-parity = SignalBuilder.DependsOn(isEven).ComputedBy(v =>
+parity = SignalBuilder.DependsOn(isEven).ComputedBy(isEvenSignal =>
 {
     Console.WriteLine("Compute parity");
-    return v.Get() ? "Even" : "Odd";
+    return isEvenSignal.Get() ? "Even" : "Odd";
 });
 
 // This changes the value for isEven so parity is computed
@@ -438,11 +439,40 @@ public class ComputedSignal1<T, T1> : ComputedSignal<T>
     }
 }
 
+
+public class ComputedSignal2<T, T1, T2> : ComputedSignal<T>
+{
+    private readonly Func<BaseSignal<T1>, BaseSignal<T2>, T> _func;
+
+    public ComputedSignal2(BaseSignal<T1> counter1, BaseSignal<T2> counter2, Func<BaseSignal<T1>, BaseSignal<T2>, T> func)
+    {
+        _func = func;
+
+        counter1.AddChild(this);
+        AddParent(counter1);
+
+        counter2.AddChild(this);
+        AddParent(counter2);
+        
+        EnsureNodeIsComputed();
+    }
+    
+    protected override void Compute()
+    {
+        Value = _func((BaseSignal<T1>)Parents[0].Signal, (BaseSignal<T2>)Parents[1].Signal);
+    }
+}
+
 public static class SignalBuilder
 {
     public static ReadOnlySignalBuilder1<T1> DependsOn<T1>(BaseSignal<T1> counter1)
     {
         return new ReadOnlySignalBuilder1<T1>(counter1);
+    }
+    
+    public static ReadOnlySignalBuilder2<T1,T2> DependsOn<T1,T2>(BaseSignal<T1> counter1, BaseSignal<T2> counter2)
+    {
+        return new ReadOnlySignalBuilder2<T1,T2>(counter1, counter2);
     }
 }
 
@@ -454,4 +484,11 @@ public class ReadOnlySignalBuilder1<T1>(BaseSignal<T1> counter1)
     }
 }
 
+public class ReadOnlySignalBuilder2<T1,T2>(BaseSignal<T1> counter1, BaseSignal<T2> counter2)
+{
+    public BaseSignal<TResult> ComputedBy<TResult>(Func<BaseSignal<T1>, BaseSignal<T2>, TResult> func)
+    {
+        return new ComputedSignal2<TResult, T1, T2>(counter1, counter2, func);
+    }
+}
 
