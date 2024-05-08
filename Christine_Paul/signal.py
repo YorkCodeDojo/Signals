@@ -9,6 +9,3 @@ class Signal[T]:
 
     def get(self) -> T:
         return self.value
-
-    def __str__(self):
-        return str(self.value)

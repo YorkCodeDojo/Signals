@@ -18,7 +18,7 @@ class TestSignal(TestCase):
         self.assertIs(s.get(), 5)
 
     def test_that_computed_signal_returns_constructor(self):
-        s = ComputedSignal(Signal(4), lambda x: x)
+        s = ComputedSignal(Signal(4), lambda x: x.get())
 
         self.assertIs(s.get(), 4)
 

@@ -1,5 +1,6 @@
 from signal import Signal
 from typing import Callable
+from pickle import dumps
 
 
 class ComputedSignal[X, T](Signal):
@@ -12,12 +13,12 @@ class ComputedSignal[X, T](Signal):
         self.depends_on = depends_on
         self.computed_by = computed_by
         self.last_value = depends_on.get()
-        self.flat_last = str(self.last_value)
+        self.flat_last = dumps(self.last_value)
 
         super().__init__(computed_by(depends_on))
 
     def get(self) -> T:
-        if self.flat_last != str(self.depends_on.get()):
+        if self.flat_last != dumps(self.depends_on.get()):
             self.last_value = self.depends_on.get()
             self.set(self.computed_by(self.depends_on))
 
