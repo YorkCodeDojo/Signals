@@ -1,50 +1,248 @@
-﻿// var data = new Signal<List<People>>(); 
-//
-// var adults = SignalBuilder.DependsOn(data)
-//                           .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList());
-//
-// var numberOfAdults = SignalBuilder.DependsOn(adults)
-//                                   .ComputedBy(value =>
-//                                   {
-//                                       Console.WriteLine("Counting adults");
-//                                       return value.Get().Count;
-//                                   });
-//
-// numberOfAdults.HasEffect((oldCount, newCount) => 
-//     Console.WriteLine($"Number of adults changed from {oldCount} to {newCount}"));
-//
-// data.Set([new People("David", 48)]);
-// Console.WriteLine(adults.Get().Count);
-//
-// data.Set([new People("David", 48), new People("Rebecca",48)]);
-// data.Set([new People("David", 48), new People("Rebecca",48)]);
-//
-// Console.WriteLine(adults.Get().Count);
-// Console.WriteLine(numberOfAdults.Get());
-//
-// data.Set([new People("David", 48), new People("Rebecca",48), new People("Mary",8)]);
+﻿
+// There are two types of signals.  Top level signals can be assigned values.  Here we create one
+// called counter which we originally a assign a value of 4
+var counter = new Signal<int>(4);
+
+// this can be changed to a five etc.
+counter.Set(5);
+
+// and read back
+Console.WriteLine(counter.Get());   // prints 5
 
 
 
-var counter = new Signal<int>(0);
-counter.HasEffect((from,to) => Console.WriteLine($"Counter changed from {from} to {to}."));
-var isEven = SignalBuilder.DependsOn(counter).ComputedBy(c => c.Get() % 2 == 0);
+// The other type of signals are computed ones,  which are based on other signals
+var isEven = SignalBuilder.DependsOn(counter).ComputedBy(v => v.Get() % 2 == 0);
 
-Console.WriteLine(counter.Get());
-Console.WriteLine(isEven.Get());
+// The javascript version looks a bit nicer,  but it's harder to work out what this counter depends on.
+//var isEven = SignalBuilder.ComputedBy(() => counter.Get() % 2 == 0);
 
-var parity = SignalBuilder.DependsOn(isEven).ComputedBy(i =>
+Console.WriteLine(isEven.Get());   // prints false as counter is 5
+
+counter.Set(6);
+Console.WriteLine(isEven.Get());   // prints true as counter is 6
+
+
+
+// Computed signals can also be based on other computed signals
+var parity = SignalBuilder.DependsOn(isEven).ComputedBy(v => v.Get() ? "Even" : "Odd");
+Console.WriteLine(parity.Get());   // prints Even as isEven is true
+
+counter.Set(9);
+Console.WriteLine(parity.Get());   // prints odd as isEven is now false
+
+
+// or on multiple signals
+var firstName = new Signal<string>("David");
+var surname = new Signal<string>("Betteridge");
+//var fullname = SignalBuilder.DependsOn(firstName, surname).ComputedBy((f,l) => $"{f.Get()} {l.Get()}");
+
+
+// Effects can be added to signals which are automatically triggered when a value changes
+counter.AddEffect((previous, current) => Console.WriteLine($"Counter changed {previous} to {current}"));
+isEven.AddEffect((previous, current) => Console.WriteLine($"IsEven changed {previous} to {current}"));
+parity.AddEffect((previous, current) => Console.WriteLine($"Parity changed {previous} to {current}"));
+
+counter.Set(10);
+// Counter changed 9 to 10
+// IsEven changed False to True 
+// Parity changed Odd to Even
+
+counter.Set(12);
+// Counter changed 10 to 12
+
+
+// Not only aren't the other two effect triggered, but also parity isn't even computed.
+parity = SignalBuilder.DependsOn(isEven).ComputedBy(v =>
 {
-    Console.WriteLine("Computing parity");
-    return i.Get() ? "Even" : "Odd";
+    Console.WriteLine("Compute parity");
+    return v.Get() ? "Even" : "Odd";
 });
-parity.HasEffect((from,to) => Console.WriteLine($"Parity changed from {from} to {to}."));
 
-counter.Set(counter.Get() + 1);
-counter.Set(counter.Get() + 1);
-counter.Set(counter.Get() + 2);
-counter.Set(counter.Get() + 4);
-counter.Set(counter.Get() + 1);
+// This changes the value for isEven so parity is computed
+counter.Set(13);
+Console.WriteLine(parity.Get());
+
+// This doesn't change the value for isEven so parity isn't computed
+counter.Set(15);
+Console.WriteLine(parity.Get());
+
+Console.WriteLine("Done");
+
+
+
+
+
+
+
+
+var data = new Signal<List<People>>([new People("David", 48)]); 
+
+var adults = SignalBuilder.DependsOn(data)
+                          .ComputedBy(value => value.Get().Where(p => p.Age > 18).ToList());
+
+var numberOfAdults = SignalBuilder.DependsOn(adults)
+                                  .ComputedBy(value =>
+                                  {
+                                      Console.WriteLine("Counting adults");
+                                      return value.Get().Count;
+                                  });
+
+numberOfAdults.AddEffect((oldCount, newCount) => 
+    Console.WriteLine($"Number of adults changed from {oldCount} to {newCount}"));
+
+Console.WriteLine(adults.Get().Count);
+
+data.Set([new People("David", 48), new People("Rebecca",48)]);
+data.Set([new People("David", 48), new People("Rebecca",48)]);
+
+Console.WriteLine(adults.Get().Count);
+Console.WriteLine(numberOfAdults.Get());
+
+data.Set([new People("David", 48), new People("Rebecca",48), new People("Mary",8)]);
+
+
+record People(string Name, int Age);
+
+// Computed Signals - Expression
+// BaseSignal
+//
+// public record Effect<T>(Action<T, T> Action);
+//
+// public abstract class BaseSignal<T>
+// {
+//     protected T Value;
+//     private List<Effect<T>> _effects = new();
+//     
+//     public abstract T Get();
+//     
+//     public Effect<T> AddEffect(Action<T, T> action)
+//     {
+//         var newEffect = new Effect<T>(action);
+//         _effects.Add(newEffect);
+//         return newEffect;
+//     }
+//
+//     public bool RemoveEffect(Effect<T> existingEffect)
+//     {
+//         return _effects.Remove(existingEffect);
+//     }
+//
+//     protected void FireEffects(T previous)
+//     {
+//         foreach (var effect in _effects)
+//         {
+//             effect.Action(previous, Value);
+//         }
+//     }
+//     
+// }
+//
+// public class Signal<T> : BaseSignal<T>
+// {
+//     public override T Get()
+//     {
+//         return Value;
+//     }
+//
+//     /// <returns>The previous value of the signal</returns>
+//     public T Set(T newValue)
+//     {
+//         var previous = Value;
+//         Value = newValue;
+//         if (previous is null || !previous.Equals(Value))
+//             FireEffects(previous);
+//         return previous;
+//     }
+// }
+//
+// public class ComputedSignal<T> : BaseSignal<T>
+// {
+//     public ComputedSignal(BaseSignal<T1> depends1, Func<BaseSignal<T1>,T> fn)
+//     {
+//         
+//     }
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//
+//
+// var counter = new Signal<int>(4);
+// counter.AddEffect((previous, current) => Console.WriteLine($"Changed from {previous} to {current}"));
+//
+//
+// var isEven = SignalBuilder.DependsOn(counter).ComputedBy(v => v.Get() % 2 == 0);
+// isEven.AddEffect((previous, current) => Console.WriteLine($"isEven Changed from {previous} to {current}"));
+//
+//
+//
+//
+//
+// var parity = SignalBuilder.DependsOn(isEven).ComputedBy(v =>
+// {dd
+//     Console.WriteLine("Computed");
+//     return v.Get() ? "Even" : "Odd";
+// });
+//
+// counter.Set(6);
+// Console.WriteLine(parity.Get());
+//
+// counter.Set(7);
+// Console.WriteLine(parity.Get());
+//
+// counter.Set(9);
+// Console.WriteLine(parity.Get());
+//
+//
+//
+//
+//
+//
+
+
+
+
+
+
+// var counter = new Signal<int>(0);
+// counter.HasEffect((from,to) => Console.WriteLine($"Counter changed from {from} to {to}."));
+// var isEven = SignalBuilder.DependsOn(counter).ComputedBy(c => c.Get() % 2 == 0);
+//
+// Console.WriteLine(counter.Get());
+// Console.WriteLine(isEven.Get());
+//
+// var parity = SignalBuilder.DependsOn(isEven).ComputedBy(i =>
+// {
+//     Console.WriteLine("Computing parity");
+//     return i.Get() ? "Even" : "Odd";
+// });
+// parity.HasEffect((from,to) => Console.WriteLine($"Parity changed from {from} to {to}."));
+//
+// counter.Set(counter.Get() + 1);
+// counter.Set(counter.Get() + 1);
+// counter.Set(counter.Get() + 2);
+// counter.Set(counter.Get() + 4);
+// counter.Set(counter.Get() + 1);
 
 public interface ISignal
 {
@@ -77,7 +275,7 @@ public abstract class BaseSignal<T> : ISignal
 
     public abstract T Get();
 
-    public void HasEffect(Action<T, T> effect)
+    public void AddEffect(Action<T, T> effect)
     {
         Effect = effect;
     }
@@ -256,5 +454,4 @@ public class ReadOnlySignalBuilder1<T1>(BaseSignal<T1> counter1)
     }
 }
 
-record People(string Name, int Age);
 
