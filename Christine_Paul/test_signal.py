@@ -50,3 +50,13 @@ class TestSignal(TestCase):
         s.set(123124218421)
 
         self.assertIs(is_even.get(), False)
+
+    def test_complicated_computed_value(self):
+        s = Signal(4)
+        s1 = Signal(s)
+        s2 = Signal(s1)
+
+        is_even = ComputedSignal(s2, lambda signal: "True" if signal.get().get().get() % 2 == 0 else "You can't handle the truth")
+        s.set(123124218421)
+
+        self.assertIs(is_even.get(), "You can't handle the truth")
