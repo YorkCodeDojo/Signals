@@ -8,3 +8,10 @@ class TestSignal(TestCase):
         s = Signal(4)
 
         self.assertIs(s.get(), 4)
+
+    def test_setter_then_returns_set_value(self):
+        s = Signal(4)
+
+        s.set(5)
+
+        self.assertIs(s.get(), 5)
