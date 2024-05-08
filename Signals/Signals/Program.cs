@@ -74,9 +74,10 @@ Console.WriteLine("Done");
 
 
 
-
 bool CompareOrderedLists<T>(IList<T> lhs, IList<T> rhs) where T : notnull
 {
+    // T must be a record type as they generate the EqualityContract property
+    // There is no proper way to enforce this in C# however.
     if (lhs.Count != rhs.Count)
         return false;
 
@@ -118,145 +119,8 @@ data.Set([new People("David", 48), new People("Rebecca",48)]);
 
 record People(string Name, int Age);
 
-// Computed Signals - Expression
-// BaseSignal
-//
-// public record Effect<T>(Action<T, T> Action);
-//
-// public abstract class BaseSignal<T>
-// {
-//     protected T Value;
-//     private List<Effect<T>> _effects = new();
-//     
-//     public abstract T Get();
-//     
-//     public Effect<T> AddEffect(Action<T, T> action)
-//     {
-//         var newEffect = new Effect<T>(action);
-//         _effects.Add(newEffect);
-//         return newEffect;
-//     }
-//
-//     public bool RemoveEffect(Effect<T> existingEffect)
-//     {
-//         return _effects.Remove(existingEffect);
-//     }
-//
-//     protected void FireEffects(T previous)
-//     {
-//         foreach (var effect in _effects)
-//         {
-//             effect.Action(previous, Value);
-//         }
-//     }
-//     
-// }
-//
-// public class Signal<T> : BaseSignal<T>
-// {
-//     public override T Get()
-//     {
-//         return Value;
-//     }
-//
-//     /// <returns>The previous value of the signal</returns>
-//     public T Set(T newValue)
-//     {
-//         var previous = Value;
-//         Value = newValue;
-//         if (previous is null || !previous.Equals(Value))
-//             FireEffects(previous);
-//         return previous;
-//     }
-// }
-//
-// public class ComputedSignal<T> : BaseSignal<T>
-// {
-//     public ComputedSignal(BaseSignal<T1> depends1, Func<BaseSignal<T1>,T> fn)
-//     {
-//         
-//     }
-// }
+/**********************************/
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//
-//
-// var counter = new Signal<int>(4);
-// counter.AddEffect((previous, current) => Console.WriteLine($"Changed from {previous} to {current}"));
-//
-//
-// var isEven = SignalBuilder.DependsOn(counter).ComputedBy(v => v.Get() % 2 == 0);
-// isEven.AddEffect((previous, current) => Console.WriteLine($"isEven Changed from {previous} to {current}"));
-//
-//
-//
-//
-//
-// var parity = SignalBuilder.DependsOn(isEven).ComputedBy(v =>
-// {dd
-//     Console.WriteLine("Computed");
-//     return v.Get() ? "Even" : "Odd";
-// });
-//
-// counter.Set(6);
-// Console.WriteLine(parity.Get());
-//
-// counter.Set(7);
-// Console.WriteLine(parity.Get());
-//
-// counter.Set(9);
-// Console.WriteLine(parity.Get());
-//
-//
-//
-//
-//
-//
-
-
-
-
-
-
-// var counter = new Signal<int>(0);
-// counter.HasEffect((from,to) => Console.WriteLine($"Counter changed from {from} to {to}."));
-// var isEven = SignalBuilder.DependsOn(counter).ComputedBy(c => c.Get() % 2 == 0);
-//
-// Console.WriteLine(counter.Get());
-// Console.WriteLine(isEven.Get());
-//
-// var parity = SignalBuilder.DependsOn(isEven).ComputedBy(i =>
-// {
-//     Console.WriteLine("Computing parity");
-//     return i.Get() ? "Even" : "Odd";
-// });
-// parity.HasEffect((from,to) => Console.WriteLine($"Parity changed from {from} to {to}."));
-//
-// counter.Set(counter.Get() + 1);
-// counter.Set(counter.Get() + 1);
-// counter.Set(counter.Get() + 2);
-// counter.Set(counter.Get() + 4);
-// counter.Set(counter.Get() + 1);
 
 public interface ISignal
 {
